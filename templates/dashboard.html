@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+
+    <!-- AI & System Status Notice -->
+    {% if not ollama_health.running %}
+        <div class="banner banner-warning">
+            <div class="banner-icon">⚠️</div>
+            <div class="banner-content">
+                <strong>Ollama is not running locally.</strong>
+                <span>Natural language & AI summaries require Ollama. You can still add and manage expenses manually. Run <code>ollama run qwen2.5:3b</code> in your terminal or check <a href="{{ url_for('settings_page') }}">Settings</a>.</span>
+            </div>
+            <div class="banner-action">
+                <a href="{{ url_for('settings_page') }}" class="btn btn-sm btn-outline">Setup Guide</a>
+            </div>
+        </div>
+    {% elif not ollama_health.model_installed %}
+        <div class="banner banner-info">
+            <div class="banner-icon">ℹ️</div>
+            <div class="banner-content">
+                <strong>Model '{{ ollama_health.target_model }}' not found in Ollama.</strong>
+                <span>Run <code>ollama pull {{ ollama_health.target_model }}</code> to enable high-accuracy local extraction.</span>
+            </div>
+            <div class="banner-action">
+                <a href="{{ url_for('settings_page') }}" class="btn btn-sm btn-outline">Check Models</a>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Top KPI Cards -->
+    <div class="kpi-grid">
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Expenses This Month</span>
+                <span class="kpi-icon">📅</span>
+            </div>
+            <div class="kpi-value">{{ stats.currency }}{{ "{:,.2f}".format(stats.total_this_month) }}</div>
+            <div class="kpi-subtext">
+                <strong>{{ stats.count_this_month }}</strong> transaction{% if stats.count_this_month != 1 %}s{% endif %} in {{ stats.current_month_label }}
+            </div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">All-Time Expenditure</span>
+                <span class="kpi-icon">💼</span>
+            </div>
+            <div class="kpi-value">{{ stats.currency }}{{ "{:,.2f}".format(stats.total_all_time) }}</div>
+            <div class="kpi-subtext">
+                Across <strong>{{ stats.count_all_time }}</strong> total recorded entries
+            </div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Top Category (Month)</span>
+                <span class="kpi-icon">🏷️</span>
+            </div>
+            <div class="kpi-value kpi-value-sm">
+                {% if stats.category_breakdown %}
+                    {{ stats.category_breakdown[0].category }}
+                {% else %}
+                    <span class="text-muted">None yet</span>
+                {% endif %}
+            </div>
+            <div class="kpi-subtext">
+                {% if stats.category_breakdown %}
+                    {{ stats.currency }}{{ "{:,.2f}".format(stats.category_breakdown[0].total) }} ({{ stats.category_breakdown[0].percentage }}%)
+                {% else %}
+                    No spending recorded this month
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Local AI Engine</span>
+                <span class="kpi-icon">🧠</span>
+            </div>
+            <div class="kpi-status-container">
+                {% if ollama_health.running and ollama_health.model_installed %}
+                    <span class="badge badge-success">● Ollama Connected</span>
+                    <span class="kpi-engine-name">Qwen2.5 3B Ready</span>
+                {% elif ollama_health.running %}
+                    <span class="badge badge-warning">● Model Missing</span>
+                    <span class="kpi-engine-name">{{ ollama_health.target_model }}</span>
+                {% else %}
+                    <span class="badge badge-neutral">○ Manual Mode</span>
+                    <span class="kpi-engine-name">Ollama Offline</span>
+                {% endif %}
+            </div>
+            <div class="kpi-subtext">
+                {% if ocr_health.available %}
+                    OCR Engine: <span class="text-success">Tesseract Ready</span>
+                {% else %}
+                    OCR Engine: <span class="text-muted">Inactive</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid: Trend Chart & Category Breakdown -->
+    <div class="dashboard-grid">
+        
+        <!-- Monthly Spending Trend (SVG Chart) -->
+        <div class="card trend-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">6-Month Spending Trend</h2>
+                    <p class="card-subtitle">Calculated monthly business expenditure</p>
+                </div>
+                <a href="{{ url_for('reports') }}" class="btn btn-outline btn-sm">Full Report →</a>
+            </div>
+            <div class="chart-container">
+                {% set max_val = 1.0 %}
+                {% for item in stats.monthly_trend %}
+                    {% if item.total > max_val %}
+                        {% set max_val = item.total %}
+                    {% endif %}
+                {% endfor %}
+
+                <div class="bar-chart">
+                    {% for item in stats.monthly_trend %}
+                        {% set height_pct = (item.total / max_val * 85) | round(1) if max_val > 0 else 0 %}
+                        <div class="bar-column">
+                            <div class="bar-tooltip">
+                                <strong>{{ item.label }}</strong><br>
+                                {{ stats.currency }}{{ "{:,.2f}".format(item.total) }}<br>
+                                <span class="text-xs">{{ item.count }} expense(s)</span>
+                            </div>
+                            <div class="bar-track">
+                                <div class="bar-fill {% if item.month_key == stats.current_month_prefix %}bar-fill-current{% endif %}" 
+                                     style="height: {{ height_pct if height_pct > 4 else 4 }}%;">
+                                </div>
+                            </div>
+                            <span class="bar-value-label">
+                                {% if item.total > 0 %}
+                                    {{ stats.currency }}{{ "{:,.0f}".format(item.total) }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </span>
+                            <span class="bar-month-label">{{ item.label.split(' ')[0] }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Breakdown -->
+        <div class="card category-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Spending by Category</h2>
+                    <p class="card-subtitle">{{ stats.current_month_label }}</p>
+                </div>
+            </div>
+            
+            {% if stats.category_breakdown %}
+                <div class="category-list">
+                    {% for cat in stats.category_breakdown %}
+                        <div class="category-item">
+                            <div class="category-item-header">
+                                <span class="category-name">{{ cat.category }}</span>
+                                <span class="category-amount">{{ stats.currency }}{{ "{:,.2f}".format(cat.total) }}</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill cat-color-{{ loop.index0 % 6 }}" style="width: {{ cat.percentage }}%;"></div>
+                            </div>
+                            <div class="category-meta">
+                                <span>{{ cat.percentage }}% of total</span>
+                                <span>{{ cat.count }} item{% if cat.count != 1 %}s{% endif %}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state-sm">
+                    <div class="empty-icon">📊</div>
+                    <p class="empty-text">No category data yet for {{ stats.current_month_label }}.</p>
+                    <a href="{{ url_for('add_expense') }}" class="btn btn-outline btn-sm">+ Log First Expense</a>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- Recent Expenses Section -->
+    <div class="card recent-expenses-card">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title">Recent Expenses</h2>
+                <p class="card-subtitle">Latest recorded transactions</p>
+            </div>
+            <div class="card-header-actions">
+                <a href="{{ url_for('list_expenses') }}" class="btn btn-outline btn-sm">View All Expenses →</a>
+                <a href="{{ url_for('add_expense') }}" class="btn btn-primary btn-sm">+ Add New</a>
+            </div>
+        </div>
+
+        {% if stats.recent_expenses %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Merchant</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Receipt</th>
+                            <th class="text-right">Amount</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exp in stats.recent_expenses %}
+                            <tr>
+                                <td class="whitespace-nowrap font-mono text-sm">{{ exp.date }}</td>
+                                <td class="font-semibold">{{ exp.merchant }}</td>
+                                <td>
+                                    <span class="category-pill">{{ exp.category }}</span>
+                                </td>
+                                <td class="text-muted text-sm">{{ exp.description or '—' }}</td>
+                                <td>
+                                    {% if exp.receipt_filename %}
+                                        <a href="{{ url_for('uploaded_file', filename=exp.receipt_filename) }}" target="_blank" class="receipt-link" title="View attached receipt">
+                                            📎 Attached
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted text-xs">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right font-semibold whitespace-nowrap">
+                                    {{ exp.currency }}{{ "{:,.2f}".format(exp.amount) }}
+                                </td>
+                                <td class="text-center whitespace-nowrap">
+                                    <a href="{{ url_for('expense_detail', expense_id=exp.id) }}" class="btn btn-icon btn-sm" title="View Details">👁️</a>
+                                    <a href="{{ url_for('edit_expense', expense_id=exp.id) }}" class="btn btn-icon btn-sm" title="Edit">✏️</a>
+                                    <button type="button" class="btn btn-icon btn-sm text-danger" title="Delete"
+                                            onclick="openDeleteModal('{{ exp.id }}', '{{ exp.merchant }}', '{{ exp.currency }}{{ '{:,.2f}'.format(exp.amount) }}')">
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">🧾</div>
+                <h3>No expenses recorded yet</h3>
+                <p>Start tracking your freelance expenses, receipts, and subscriptions right now.</p>
+                <div class="empty-actions">
+                    <a href="{{ url_for('add_expense') }}" class="btn btn-primary">Add Your First Expense</a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

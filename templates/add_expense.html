@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Add Expense{% endblock %}
+
+{% block content %}
+<div class="add-expense-page">
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Record an Expense</h1>
+            <p class="page-subtitle">Add expenses using natural language, upload receipts for local OCR extraction, or enter manually.</p>
+        </div>
+        <div class="ai-status-pill">
+            {% if ollama_health.running and ollama_health.model_installed %}
+                <span class="status-dot status-online"></span>
+                <span>Local AI Ready: <strong>{{ ollama_health.target_model }}</strong></span>
+            {% elif ollama_health.running %}
+                <span class="status-dot status-warning"></span>
+                <span>Ollama Online (Model missing)</span>
+            {% else %}
+                <span class="status-dot status-offline"></span>
+                <span>Ollama Offline (Manual mode active)</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Mode Selector Tabs -->
+    <div class="tabs-nav">
+        <button type="button" class="tab-btn active" id="tabBtnNl" onclick="switchAddTab('nl')">
+            <span class="tab-icon">✨</span>
+            <span class="tab-title">Natural Language</span>
+            <span class="tab-badge">AI Powered</span>
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnReceipt" onclick="switchAddTab('receipt')">
+            <span class="tab-icon">📷</span>
+            <span class="tab-title">Receipt Upload</span>
+            <span class="tab-badge">Local OCR + AI</span>
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnManual" onclick="switchAddTab('manual')">
+            <span class="tab-icon">✍️</span>
+            <span class="tab-title">Manual Entry</span>
+        </button>
+    </div>
+
+    <!-- TAB 1: Natural Language Form -->
+    <div class="tab-pane active" id="paneNl">
+        <div class="card add-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Describe Your Expense</h2>
+                    <p class="card-subtitle">Type naturally. Local Qwen2.5 3B will structure the merchant, date, amount, currency, and category.</p>
+                </div>
+            </div>
+
+            <div class="nl-form-container">
+                <div class="form-group">
+                    <label for="nlInput" class="form-label">Expense Description</label>
+                    <textarea id="nlInput" class="form-control nl-textarea" rows="3" 
+                        placeholder="e.g. I paid ₹850 for internet on October 10 for my freelance work.&#10;or: Spent $49 on GitHub Copilot subscription today.&#10;or: ₹1,250 for design tool subscription on Oct 12."></textarea>
+                </div>
+
+                <div class="nl-suggestions">
+                    <span class="suggestion-label">Try an example:</span>
+                    <button type="button" class="suggestion-chip" onclick="setNlExample('I paid ₹850 for internet on October 10 for my freelance work.')">
+                        Internet bill (₹850)
+                    </button>
+                    <button type="button" class="suggestion-chip" onclick="setNlExample('₹1,250 for a design tool subscription paid on October 12.')">
+                        Design tool subscription (₹1,250)
+                    </button>
+                    <button type="button" class="suggestion-chip" onclick="setNlExample('Bought a mechanical keyboard for ₹3,499 from Amazon on Oct 5 for coding.')">
+                        Hardware purchase (₹3,499)
+                    </button>
+                </div>
+
+                <div class="action-bar">
+                    <button type="button" id="btnParseNl" class="btn btn-primary" onclick="parseNaturalLanguage()">
+                        <span id="nlSpinner" class="spinner" style="display: none;"></span>
+                        <span id="nlBtnText">Extract Details with AI</span>
+                    </button>
+                </div>
+
+                <div id="nlErrorAlert" class="alert alert-danger mt-3" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: Receipt Upload Form -->
+    <div class="tab-pane" id="paneReceipt">
+        <div class="card add-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Upload Receipt Document</h2>
+                    <p class="card-subtitle">Local Tesseract extracts the text, and local Qwen2.5 3B parses fields. 100% private on your machine.</p>
+                </div>
+            </div>
+
+            {% if not ocr_health.available %}
+                <div class="alert alert-warning mb-4">
+                    <strong>Tesseract OCR engine is not detected.</strong>
+                    <span>Receipt text extraction requires Tesseract installed on your system. You can still use the <strong>Natural Language</strong> or <strong>Manual Entry</strong> tabs right now. See <a href="{{ url_for('settings_page') }}">Settings</a> for installation steps.</span>
+                </div>
+            {% endif %}
+
+            <div class="upload-dropzone" id="dropZone" onclick="document.getElementById('receiptFileInput').click()">
+                <div class="dropzone-content">
+                    <span class="dropzone-icon">🧾</span>
+                    <h3>Drag & Drop receipt or <span class="text-primary underline">Browse File</span></h3>
+                    <p class="text-muted text-sm">Supported formats: JPG, PNG, PDF (Up to 16MB)</p>
+                    <div id="selectedFileName" class="selected-file-badge" style="display: none;"></div>
+                </div>
+                <input type="file" id="receiptFileInput" accept=".png,.jpg,.jpeg,.pdf" style="display: none;" onchange="handleFileSelected(event)">
+            </div>
+
+            <div class="action-bar mt-3">
+                <button type="button" id="btnProcessReceipt" class="btn btn-primary" onclick="processReceiptUpload()" disabled>
+                    <span id="receiptSpinner" class="spinner" style="display: none;"></span>
+                    <span id="receiptBtnText">Extract Receipt with Local OCR</span>
+                </button>
+            </div>
+
+            <div id="receiptErrorAlert" class="alert alert-danger mt-3" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- TAB 3: Manual Entry (Direct jump to clean form) -->
+    <div class="tab-pane" id="paneManual">
+        <div class="card add-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Direct Manual Entry</h2>
+                    <p class="card-subtitle">Fill in the expense details directly into your database.</p>
+                </div>
+            </div>
+            <p class="text-muted">You can jump straight into the editable form below and type your values.</p>
+            <button type="button" class="btn btn-outline" onclick="resetFormForManual()">Clear & Start Fresh Manual Form</button>
+        </div>
+    </div>
+
+    <!-- REVIEW & CONFIRM FORM SECTION (Revealed after AI or for manual entry) -->
+    <div class="card review-card mt-4" id="reviewSection">
+        <div class="card-header review-header">
+            <div>
+                <div class="badge badge-accent mb-1" id="reviewBadge">Review & Confirm</div>
+                <h2 class="card-title" id="reviewCardTitle">Review Extracted Expense Details</h2>
+                <p class="card-subtitle">Verify and adjust any values before committing to your records.</p>
+            </div>
+            <div id="rawPreviewToggleContainer" style="display: none;">
+                <button type="button" class="btn btn-sm btn-outline" onclick="toggleRawPreview()">Toggle Raw Text Preview</button>
+            </div>
+        </div>
+
+        <!-- Raw Text Preview collapsible -->
+        <div id="rawPreviewBox" class="raw-preview-box" style="display: none;">
+            <div class="raw-preview-header">
+                <strong>Extracted Raw Text / OCR Content:</strong>
+            </div>
+            <pre id="rawPreviewText" class="raw-preview-code"></pre>
+        </div>
+
+        <form action="{{ url_for('save_expense') }}" method="POST" id="expenseReviewForm" class="review-form">
+            <input type="hidden" name="receipt_filename" id="formReceiptFilename" value="">
+            <input type="hidden" name="raw_text" id="formRawText" value="">
+
+            <div class="form-grid">
+                
+                <!-- Merchant -->
+                <div class="form-group">
+                    <label for="formMerchant" class="form-label required">Merchant / Vendor</label>
+                    <input type="text" name="merchant" id="formMerchant" class="form-control" placeholder="e.g. Amazon, GitHub, Airtel" required>
+                    <span class="form-hint">Who was paid? (Company, service, or individual)</span>
+                </div>
+
+                <!-- Date -->
+                <div class="form-group">
+                    <label for="formDate" class="form-label required">Transaction Date</label>
+                    <input type="date" name="date" id="formDate" class="form-control" value="{{ today_iso }}" required>
+                    <span class="form-hint">Date payment occurred</span>
+                </div>
+
+                <!-- Amount & Currency -->
+                <div class="form-group">
+                    <label for="formAmount" class="form-label required">Amount & Currency</label>
+                    <div class="input-group">
+                        <select name="currency" id="formCurrency" class="form-control currency-select">
+                            <option value="₹" {% if default_currency == '₹' %}selected{% endif %}>₹ (INR)</option>
+                            <option value="$" {% if default_currency == '$' %}selected{% endif %}>$ (USD)</option>
+                            <option value="€" {% if default_currency == '€' %}selected{% endif %}>€ (EUR)</option>
+                            <option value="£" {% if default_currency == '£' %}selected{% endif %}>£ (GBP)</option>
+                            <option value="A$" {% if default_currency == 'A$' %}selected{% endif %}>A$ (AUD)</option>
+                            <option value="C$" {% if default_currency == 'C$' %}selected{% endif %}>C$ (CAD)</option>
+                        </select>
+                        <input type="number" step="0.01" min="0.01" name="amount" id="formAmount" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <span class="form-hint">Total transaction cost</span>
+                </div>
+
+                <!-- Category -->
+                <div class="form-group">
+                    <label for="formCategory" class="form-label required">Expense Category</label>
+                    <select name="category" id="formCategory" class="form-control" required>
+                        {% for cat in categories %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="form-hint">Classification for tax and reporting</span>
+                </div>
+
+                <!-- Description -->
+                <div class="form-group full-width">
+                    <label for="formDescription" class="form-label">Business Description</label>
+                    <input type="text" name="description" id="formDescription" class="form-control" placeholder="e.g. Internet expense for freelance work, monthly design subscription">
+                    <span class="form-hint">Brief explanation of the business need</span>
+                </div>
+
+                <!-- AI Confidence / Notes -->
+                <div class="form-group full-width">
+                    <label for="formConfidenceNotes" class="form-label">Confidence Notes / Uncertainties</label>
+                    <textarea name="confidence_notes" id="formConfidenceNotes" class="form-control notes-textarea" rows="2" placeholder="Any uncertainty notes or manual adjustment log..."></textarea>
+                    <span class="form-hint">AI generated notes or user adjustments</span>
+                </div>
+
+            </div>
+
+            <!-- Receipt Attached Preview if any -->
+            <div id="attachedReceiptBadge" class="attached-file-row" style="display: none;">
+                <span class="attached-icon">📎</span>
+                <span id="attachedReceiptName" class="attached-filename"></span>
+                <span class="badge badge-success text-xs">Saved Locally</span>
+            </div>
+
+            <div class="form-actions mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <span>💾</span> Save Expense Record
+                </button>
+                <a href="{{ url_for('list_expenses') }}" class="btn btn-secondary btn-lg">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

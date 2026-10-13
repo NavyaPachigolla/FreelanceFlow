@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & System Health{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Settings & Diagnostics</h1>
+            <p class="page-subtitle">Configure application preferences and verify local AI & OCR engines.</p>
+        </div>
+    </div>
+
+    <!-- System Diagnostics Cards -->
+    <div class="settings-grid mb-4">
+        
+        <!-- Ollama Service Card -->
+        <div class="card health-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Local Ollama AI Engine</h2>
+                    <p class="card-subtitle">Open-weight language model server</p>
+                </div>
+                <div>
+                    {% if ollama_health.running and ollama_health.model_installed %}
+                        <span class="badge badge-success">● Connected & Ready</span>
+                    {% elif ollama_health.running %}
+                        <span class="badge badge-warning">● Model Missing</span>
+                    {% else %}
+                        <span class="badge badge-danger">● Offline</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="health-details">
+                <div class="health-row">
+                    <span class="health-label">API Endpoint:</span>
+                    <span class="health-val font-mono">{{ settings.ollama_url }}</span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label">Target Model:</span>
+                    <span class="health-val font-mono">{{ settings.ollama_model }}</span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label">Ollama Running:</span>
+                    <span class="health-val">
+                        {% if ollama_health.running %}
+                            <span class="text-success font-semibold">Yes (Active)</span>
+                        {% else %}
+                            <span class="text-danger font-semibold">No (Not responding)</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label">Model Status:</span>
+                    <span class="health-val">
+                        {% if ollama_health.model_installed %}
+                            <span class="text-success font-semibold">Installed (Ready for inference)</span>
+                        {% else %}
+                            <span class="text-warning font-semibold">Not downloaded yet</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% if ollama_health.available_models %}
+                    <div class="health-row">
+                        <span class="health-label">Installed Models:</span>
+                        <span class="health-val font-mono text-xs">
+                            {{ ollama_health.available_models | join(', ') }}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="card-footer-actions mt-3">
+                <button type="button" class="btn btn-outline btn-sm" onclick="testOllamaLive()">
+                    <span id="testOllamaSpinner" class="spinner" style="display: none;"></span>
+                    <span id="testOllamaBtnText">🔄 Test Ollama Connection</span>
+                </button>
+            </div>
+            <div id="testOllamaResult" class="test-result-box mt-2" style="display: none;"></div>
+        </div>
+
+        <!-- Local OCR Engine Card -->
+        <div class="card health-card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Local OCR Engine</h2>
+                    <p class="card-subtitle">Tesseract image text extraction</p>
+                </div>
+                <div>
+                    {% if ocr_health.available %}
+                        <span class="badge badge-success">● Ready</span>
+                    {% else %}
+                        <span class="badge badge-warning">● Unavailable</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="health-details">
+                <div class="health-row">
+                    <span class="health-label">Pytesseract Package:</span>
+                    <span class="health-val">
+                        {% if ocr_health.pytesseract_installed %}
+                            <span class="text-success font-semibold">Installed</span>
+                        {% else %}
+                            <span class="text-danger font-semibold">Not Installed</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label">Tesseract Engine:</span>
+                    <span class="health-val font-mono">
+                        {% if ocr_health.engine_version %}
+                            v{{ ocr_health.engine_version }}
+                        {% else %}
+                            <span class="text-warning">Not found in PATH</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="health-row">
+                    <span class="health-label">PDF Extraction:</span>
+                    <span class="health-val text-success font-semibold">Supported (pypdf)</span>
+                </div>
+                {% if ocr_health.error %}
+                    <div class="health-row">
+                        <span class="health-label">Diagnostic Note:</span>
+                        <span class="health-val text-warning text-xs">{{ ocr_health.error }}</span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="card-footer-actions mt-3">
+                <button type="button" class="btn btn-outline btn-sm" onclick="testOcrLive()">
+                    <span id="testOcrSpinner" class="spinner" style="display: none;"></span>
+                    <span id="testOcrBtnText">🔄 Test OCR Engine</span>
+                </button>
+            </div>
+            <div id="testOcrResult" class="test-result-box mt-2" style="display: none;"></div>
+        </div>
+
+    </div>
+
+    <!-- Application Preferences Form -->
+    <div class="card settings-card mb-4">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title">Application Preferences</h2>
+                <p class="card-subtitle">Adjust your currency, business name, and local model target.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('settings_page') }}" class="settings-form">
+            <div class="form-grid">
+                
+                <!-- Business Name -->
+                <div class="form-group">
+                    <label for="business_name" class="form-label">Business / Freelancer Name</label>
+                    <input type="text" name="business_name" id="business_name" class="form-control" value="{{ settings.business_name }}">
+                    <span class="form-hint">Displayed in reports and headers</span>
+                </div>
+
+                <!-- Default Currency -->
+                <div class="form-group">
+                    <label for="default_currency" class="form-label">Default Currency Symbol</label>
+                    <select name="default_currency" id="default_currency" class="form-control">
+                        <option value="₹" {% if settings.default_currency == '₹' %}selected{% endif %}>₹ — Indian Rupee (INR)</option>
+                        <option value="$" {% if settings.default_currency == '$' %}selected{% endif %}>$ — US Dollar (USD)</option>
+                        <option value="€" {% if settings.default_currency == '€' %}selected{% endif %}>€ — Euro (EUR)</option>
+                        <option value="£" {% if settings.default_currency == '£' %}selected{% endif %}>£ — British Pound (GBP)</option>
+                        <option value="A$" {% if settings.default_currency == 'A$' %}selected{% endif %}>A$ — Australian Dollar (AUD)</option>
+                        <option value="C$" {% if settings.default_currency == 'C$' %}selected{% endif %}>C$ — Canadian Dollar (CAD)</option>
+                        <option value="¥" {% if settings.default_currency == '¥' %}selected{% endif %}>¥ — Japanese Yen (JPY)</option>
+                    </select>
+                    <span class="form-hint">Preferred currency symbol for calculations</span>
+                </div>
+
+                <!-- Ollama URL -->
+                <div class="form-group">
+                    <label for="ollama_url" class="form-label">Ollama API URL</label>
+                    <input type="text" name="ollama_url" id="ollama_url" class="form-control" value="{{ settings.ollama_url }}">
+                    <span class="form-hint">Default is <code>http://localhost:11434</code></span>
+                </div>
+
+                <!-- Ollama Model -->
+                <div class="form-group">
+                    <label for="ollama_model" class="form-label">Ollama Model</label>
+                    <input type="text" name="ollama_model" id="ollama_model" class="form-control" value="{{ settings.ollama_model }}">
+                    <span class="form-hint">Recommended open-weight model: <code>qwen2.5:3b</code></span>
+                </div>
+
+            </div>
+
+            <div class="form-actions mt-4">
+                <button type="submit" class="btn btn-primary">Save Preferences</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Quick Setup Guide Accordion -->
+    <div class="card setup-guide-card">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title">Local Setup Reference & Instructions</h2>
+                <p class="card-subtitle">Quick commands for running Ollama and Tesseract on Windows, macOS, or Linux.</p>
+            </div>
+        </div>
+
+        <div class="setup-guide-content">
+            <div class="setup-step">
+                <h3>1. Running Ollama & Downloading Qwen2.5 3B</h3>
+                <p>Download Ollama from <a href="https://ollama.com" target="_blank" class="underline">ollama.com</a>. Once installed, start the service and pull the 3B model:</p>
+                <div class="code-block">
+                    <code>ollama pull qwen2.5:3b</code>
+                </div>
+                <p class="text-sm text-muted mt-1">Qwen2.5 3B occupies only ~1.9 GB of RAM/VRAM and runs smoothly on standard modern laptops.</p>
+            </div>
+
+            <div class="setup-step mt-3">
+                <h3>2. Tesseract OCR on Windows</h3>
+                <p>If Tesseract is not installed on Windows, download the official Windows installer from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank" class="underline">UB-Mannheim Tesseract Wiki</a> and ensure the installation folder (typically <code>C:\Program Files\Tesseract-OCR</code>) is in your system PATH.</p>
+            </div>
+
+            <div class="setup-step mt-3">
+                <h3>3. 100% Privacy Guarantee</h3>
+                <p>FreelanceFlow AI operates entirely on your workstation. No receipt images, merchant details, or financial figures are ever transmitted across the internet. SQLite stores your records in the local <code>instance/</code> directory.</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

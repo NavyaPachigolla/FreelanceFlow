@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Expense #{{ expense.id }}{% endblock %}
+
+{% block content %}
+<div class="edit-expense-page">
+
+    <div class="page-header">
+        <div>
+            <div class="breadcrumbs">
+                <a href="{{ url_for('expense_detail', expense_id=expense.id) }}">← Back to Expense #{{ expense.id }}</a>
+            </div>
+            <h1 class="page-title">Edit Expense</h1>
+            <p class="page-subtitle">Update records, fix OCR discrepancies, or attach a receipt.</p>
+        </div>
+    </div>
+
+    <div class="card edit-card">
+        <form action="{{ url_for('edit_expense', expense_id=expense.id) }}" method="POST" enctype="multipart/form-data">
+            <div class="form-grid">
+                
+                <!-- Merchant -->
+                <div class="form-group">
+                    <label for="merchant" class="form-label required">Merchant / Vendor</label>
+                    <input type="text" name="merchant" id="merchant" class="form-control" value="{{ expense.merchant }}" required>
+                </div>
+
+                <!-- Date -->
+                <div class="form-group">
+                    <label for="date" class="form-label required">Transaction Date</label>
+                    <input type="date" name="date" id="date" class="form-control" value="{{ expense.date }}" required>
+                </div>
+
+                <!-- Amount & Currency -->
+                <div class="form-group">
+                    <label for="amount" class="form-label required">Amount & Currency</label>
+                    <div class="input-group">
+                        <select name="currency" id="currency" class="form-control currency-select">
+                            <option value="₹" {% if expense.currency == '₹' %}selected{% endif %}>₹ (INR)</option>
+                            <option value="$" {% if expense.currency == '$' %}selected{% endif %}>$ (USD)</option>
+                            <option value="€" {% if expense.currency == '€' %}selected{% endif %}>€ (EUR)</option>
+                            <option value="£" {% if expense.currency == '£' %}selected{% endif %}>£ (GBP)</option>
+                            <option value="A$" {% if expense.currency == 'A$' %}selected{% endif %}>A$ (AUD)</option>
+                            <option value="C$" {% if expense.currency == 'C$' %}selected{% endif %}>C$ (CAD)</option>
+                        </select>
+                        <input type="number" step="0.01" min="0.01" name="amount" id="amount" class="form-control" value="{{ expense.amount }}" required>
+                    </div>
+                </div>
+
+                <!-- Category -->
+                <div class="form-group">
+                    <label for="category" class="form-label required">Category</label>
+                    <select name="category" id="category" class="form-control" required>
+                        {% for cat in categories %}
+                            <option value="{{ cat }}" {% if expense.category == cat %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Description -->
+                <div class="form-group full-width">
+                    <label for="description" class="form-label">Business Description</label>
+                    <input type="text" name="description" id="description" class="form-control" value="{{ expense.description or '' }}" placeholder="Describe business purpose">
+                </div>
+
+                <!-- Confidence Notes -->
+                <div class="form-group full-width">
+                    <label for="confidence_notes" class="form-label">Confidence Notes / Adjustments</label>
+                    <textarea name="confidence_notes" id="confidence_notes" class="form-control" rows="2">{{ expense.confidence_notes or '' }}</textarea>
+                </div>
+
+                <!-- Receipt Attachment -->
+                <div class="form-group full-width">
+                    <label for="new_receipt" class="form-label">Receipt File</label>
+                    {% if expense.receipt_filename %}
+                        <div class="current-file-box mb-2">
+                            <span>Current file: <strong>{{ expense.receipt_filename }}</strong></span>
+                            <a href="{{ url_for('uploaded_file', filename=expense.receipt_filename) }}" target="_blank" class="text-sm underline ml-2">View</a>
+                        </div>
+                    {% endif %}
+                    <input type="file" name="new_receipt" id="new_receipt" class="form-control" accept=".png,.jpg,.jpeg,.pdf">
+                    <span class="form-hint">Upload a replacement or new receipt (PNG, JPG, PDF)</span>
+                </div>
+
+            </div>
+
+            <div class="form-actions mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">Update Expense</button>
+                <a href="{{ url_for('expense_detail', expense_id=expense.id) }}" class="btn btn-secondary btn-lg">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

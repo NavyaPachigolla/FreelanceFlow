@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Expense Reports{% endblock %}
+
+{% block content %}
+<div class="reports-page">
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Monthly Expense Reports</h1>
+            <p class="page-subtitle">Deterministic financial statistics with local AI synthesis and cost-saving insights.</p>
+        </div>
+        
+        <!-- Month Selector Form -->
+        <form method="GET" action="{{ url_for('reports') }}" class="month-selector-form">
+            <label for="monthSelect" class="form-label-sm font-semibold">Select Month:</label>
+            <select name="month" id="monthSelect" class="form-control form-control-sm" onchange="this.form.submit()">
+                {% for ym in report.available_months %}
+                    <option value="{{ ym }}" {% if ym == selected_ym %}selected{% endif %}>
+                        {{ ym }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <!-- Monthly Summary KPIs -->
+    <div class="kpi-grid">
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Total Spending</span>
+                <span class="kpi-icon">💰</span>
+            </div>
+            <div class="kpi-value">{{ report.currency }}{{ "{:,.2f}".format(report.total_spending) }}</div>
+            <div class="kpi-subtext">Total verified expenditures in {{ report.month_label }}</div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Transactions</span>
+                <span class="kpi-icon">🧾</span>
+            </div>
+            <div class="kpi-value">{{ report.transaction_count }}</div>
+            <div class="kpi-subtext">Recorded expense entries</div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Average Transaction</span>
+                <span class="kpi-icon">📊</span>
+            </div>
+            <div class="kpi-value">{{ report.currency }}{{ "{:,.2f}".format(report.average_expense) }}</div>
+            <div class="kpi-subtext">Mean transaction value</div>
+        </div>
+
+        <div class="card kpi-card">
+            <div class="kpi-header">
+                <span class="kpi-title">Top Category</span>
+                <span class="kpi-icon">🏷️</span>
+            </div>
+            <div class="kpi-value kpi-value-sm">
+                {% if report.category_breakdown %}
+                    {{ report.category_breakdown[0].category }}
+                {% else %}
+                    <span class="text-muted">None</span>
+                {% endif %}
+            </div>
+            <div class="kpi-subtext">
+                {% if report.category_breakdown %}
+                    {{ report.category_breakdown[0].percentage }}% of monthly outlay
+                {% else %}
+                    No expenses recorded
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Report Synthesis Card -->
+    <div class="card ai-report-card mb-4" id="aiReportCard">
+        <div class="card-header">
+            <div>
+                <span class="badge badge-accent mb-1">🤖 Local AI Synthesis</span>
+                <h2 class="card-title">Executive Financial Summary & Insights</h2>
+                <p class="card-subtitle">Synthesized by local <code>{{ ollama_model }}</code> from mathematically pre-calculated database totals.</p>
+            </div>
+            <div>
+                <button type="button" id="btnGenerateAiReport" class="btn btn-primary" onclick="generateAiReport('{{ report.year }}', '{{ report.month }}')">
+                    <span id="aiReportSpinner" class="spinner" style="display: none;"></span>
+                    <span id="aiReportBtnText">✨ Generate AI Analysis</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="aiReportContent" class="ai-report-content" style="display: none;">
+            
+            <!-- Summary Paragraph -->
+            <div class="ai-section">
+                <h3 class="ai-section-title"><span>📝</span> Overview</h3>
+                <p id="aiSummaryText" class="ai-text"></p>
+            </div>
+
+            <!-- Recurring Expense Observations -->
+            <div class="ai-section mt-3">
+                <h3 class="ai-section-title"><span>🔄</span> Recurring & Subscription Observations</h3>
+                <p id="aiInsightsText" class="ai-text"></p>
+            </div>
+
+            <!-- Actionable Cost Reduction Suggestions -->
+            <div class="ai-section mt-3">
+                <h3 class="ai-section-title"><span>💡</span> Practical Cost-Reduction Suggestions</h3>
+                <div id="aiSuggestionsBox" class="ai-suggestions-box"></div>
+            </div>
+
+            <!-- Informational Disclaimer Notice -->
+            <div class="ai-disclaimer-notice mt-3">
+                <span class="disclaimer-icon">ℹ️</span>
+                <span id="aiDisclaimerText">
+                    Informational notice: This summary was synthesized by local Qwen2.5 3B from actual database totals. Cost suggestions are suggestions and should be reviewed by the user.
+                </span>
+            </div>
+
+        </div>
+
+        <!-- Initial Placeholder when not yet generated -->
+        <div id="aiReportPlaceholder" class="ai-placeholder-box">
+            <span class="placeholder-icon">🪄</span>
+            <p>Click <strong>"Generate AI Analysis"</strong> to produce an AI-written summary, recurring pattern audit, and expense reduction suggestions for {{ report.month_label }}.</p>
+            <span class="text-xs text-muted">Zero cloud API calls. Generated 100% on your machine by Qwen2.5 3B.</span>
+        </div>
+    </div>
+
+    <!-- Breakdowns Grid -->
+    <div class="reports-breakdown-grid">
+        
+        <!-- Category Breakdown Table & Progress -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Spending by Category</h2>
+                    <p class="card-subtitle">Breakdown of {{ report.month_label }} expenses</p>
+                </div>
+            </div>
+
+            {% if report.category_breakdown %}
+                <div class="category-list">
+                    {% for cat in report.category_breakdown %}
+                        <div class="category-item">
+                            <div class="category-item-header">
+                                <span class="category-name font-semibold">{{ cat.category }}</span>
+                                <span class="category-amount">{{ report.currency }}{{ "{:,.2f}".format(cat.total) }}</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill cat-color-{{ loop.index0 % 6 }}" style="width: {{ cat.percentage }}%;"></div>
+                            </div>
+                            <div class="category-meta">
+                                <span>{{ cat.percentage }}% of total</span>
+                                <span>{{ cat.count }} transaction{% if cat.count != 1 %}s{% endif %}</span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state-sm">
+                    <p class="text-muted">No expenses recorded for this month.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Largest 5 Expenses -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Top 5 Largest Outlays</h2>
+                    <p class="card-subtitle">Highest individual expenditures</p>
+                </div>
+            </div>
+
+            {% if report.largest_expenses %}
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Merchant</th>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th class="text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in report.largest_expenses %}
+                                <tr>
+                                    <td class="font-semibold">{{ item.merchant }}</td>
+                                    <td class="font-mono text-sm">{{ item.date }}</td>
+                                    <td><span class="category-pill">{{ item.category }}</span></td>
+                                    <td class="text-right font-semibold">
+                                        {{ item.currency }}{{ "{:,.2f}".format(item.amount) }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state-sm">
+                    <p class="text-muted">No transactions to display.</p>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <!-- Recurring Charges Table -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title">Detected Recurring or Frequent Vendors</h2>
+                <p class="card-subtitle">Merchants with multiple charges or recurring subscription keywords</p>
+            </div>
+        </div>
+
+        {% if report.recurring_candidates %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Merchant</th>
+                            <th>Category</th>
+                            <th>Transaction Count</th>
+                            <th>Avg Charge</th>
+                            <th class="text-right">Total Outlay</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in report.recurring_candidates %}
+                            <tr>
+                                <td class="font-semibold">{{ r.merchant }}</td>
+                                <td><span class="category-pill">{{ r.category }}</span></td>
+                                <td>{{ r.count }} payment{% if r.count != 1 %}s{% endif %}</td>
+                                <td class="font-mono">{{ report.currency }}{{ "{:,.2f}".format(r.avg_amount) }}</td>
+                                <td class="text-right font-semibold">
+                                    {{ report.currency }}{{ "{:,.2f}".format(r.total) }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-3 text-muted text-sm">
+                No recurring pattern or repeated charges detected for {{ report.month_label }}.
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

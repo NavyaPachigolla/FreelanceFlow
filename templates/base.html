@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} — FreelanceFlow AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="description" content="FreelanceFlow AI — Local AI Expense Assistant. Less paperwork. More paid work.">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">
+                <a href="{{ url_for('dashboard') }}" class="brand-link">
+                    <span class="brand-icon">⚡</span>
+                    <div class="brand-text">
+                        <span class="brand-title">FreelanceFlow <span class="badge-ai">AI</span></span>
+                        <span class="brand-tagline">Less paperwork. More paid work.</span>
+                    </div>
+                </a>
+            </div>
+
+            <nav class="nav-menu" id="navMenu">
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <span class="nav-icon">📊</span> Dashboard
+                </a>
+                <a href="{{ url_for('add_expense') }}" class="nav-link {% if request.endpoint == 'add_expense' %}active{% endif %}">
+                    <span class="nav-icon">➕</span> Add Expense
+                </a>
+                <a href="{{ url_for('list_expenses') }}" class="nav-link {% if request.endpoint in ['list_expenses', 'expense_detail', 'edit_expense'] %}active{% endif %}">
+                    <span class="nav-icon">📑</span> All Expenses
+                </a>
+                <a href="{{ url_for('reports') }}" class="nav-link {% if request.endpoint == 'reports' %}active{% endif %}">
+                    <span class="nav-icon">📈</span> Reports
+                </a>
+                <a href="{{ url_for('settings_page') }}" class="nav-link {% if request.endpoint == 'settings_page' %}active{% endif %}">
+                    <span class="nav-icon">⚙️</span> Settings
+                </a>
+            </nav>
+
+            <div class="header-actions">
+                <a href="{{ url_for('add_expense') }}" class="btn btn-primary btn-sm">
+                    <span>+</span> Record Expense
+                </a>
+                <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle Navigation">
+                    ☰
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Flash Messages -->
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <span class="alert-text">{{ message }}</span>
+                        <button class="alert-close" onclick="this.parentElement.remove();">&times;</button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-container">
+            <div class="footer-left">
+                <strong>FreelanceFlow AI</strong> — Local, Private & Open-Source AI Expense Assistant.
+                <span class="footer-badge">🔒 100% On-Device</span>
+            </div>
+            <div class="footer-right">
+                <span>Model: <code>{{ ollama_model }}</code> via Ollama</span>
+                <span>•</span>
+                <span>Currency: <code>{{ default_currency }}</code></span>
+                <span>•</span>
+                <a href="{{ url_for('settings_page') }}">System Health</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Delete Confirmation Modal (Used across pages) -->
+    <div id="deleteModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Confirm Deletion</h3>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this expense record?</p>
+                <p class="modal-meta" id="deleteModalMeta"></p>
+                <p class="text-muted text-sm">This action cannot be undone. Any attached local receipt will also be removed.</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <form id="deleteModalForm" method="POST" action="">
+                    <button type="submit" class="btn btn-danger">Delete Permanently</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
